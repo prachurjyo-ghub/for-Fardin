@@ -1,0 +1,62 @@
+# Operating-system and editor state
+.DS_Store
+**/.DS_Store
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+*.swp
+
+# Dependencies and generated builds
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+coverage/
+**/coverage/
+*.tsbuildinfo
+
+# Environment files and credentials (keep documented placeholders)
+.env
+.env.*
+**/.env
+**/.env.*
+CREDENTIALS.md
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and local runtime state
+*.log
+logs/
+**/logs/
+.local/
+**/.local/
+recovery-outbox/
+**/recovery-outbox/
+invitation-outbox/
+**/invitation-outbox/
+uploads/
+**/uploads/
+.vercel/
+**/.vercel/
+.openai/
+**/.openai/
+
+# Local databases and database journals
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite3-journal
+.neon

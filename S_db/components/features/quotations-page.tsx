@@ -1,0 +1,41 @@
+"use client"
+import Link from "next/link"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
+import { HiCheck, HiClipboardDocumentList, HiExclamationTriangle } from "react-icons/hi2"
+import { DataTabs } from "@/components/shared/data-tabs"
+import { Field, FormControl } from "@/components/shared/form-control"
+import { MetricCard } from "@/components/shared/metric-card"
+import { PageHeader } from "@/components/shared/page-header"
+import { Panel } from "@/components/shared/panel"
+import { PortalButton } from "@/components/shared/portal-button"
+import { PageSkeleton } from "@/components/shared/skeletons"
+import { StatusBadge } from "@/components/shared/status-badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { createRevision, getQuotation, getQuotations, replyClarification, submitQuotation, updateQuotation, withdrawQuotation, type ApiQuote } from "@/lib/services/quotations"
+import type { Quotation } from "@/lib/types"
+import { useAuth } from "@/providers/auth-provider"
+import { errorMessage } from "@/lib/services/auth"
+
+export default function QuotationsPage() {
+  const { membership } = useAuth()
+  const businessId = membership?.business.id
+  const [loading,setLoading]=useState(true), [busy,setBusy]=useState(false)
+  const [quotes,setQuotes]=useState<Quotation[]>([]), [tab,setTab]=useState("all")
+  const [selected,setSelected]=useState<Quotation|null>(null), [detail,setDetail]=useState<ApiQuote|null>(null)
+  const [reason,setReason]=useState("")
+  const load=useCallback(async()=>{if(!businessId)return;setQuotes(await getQuotations(businessId))},[businessId])
+  useEffect(()=>{void load().catch((e)=>toast.error(errorMessage(e))).finally(()=>setLoading(false))},[load])
+  const filtered=useMemo(()=>tab==="awaiting"?quotes.filter(q=>q.status==="Awaiting decision"):tab==="accepted"?quotes.filter(q=>q.status==="Accepted"):tab==="closed"?quotes.filter(q=>["Not selected","Clarification"].includes(q.status)):quotes,[quotes,tab])
+  async function open(q:Quotation){setSelected(q);setDetail(null);if(businessId&&q.backendId)try{setDetail(await getQuotation(businessId,q.backendId))}catch(e){toast.error(errorMessage(e))}}
+  async function action(run:()=>Promise<unknown>,message:string,close=false){setBusy(true);try{await run();toast.success(message);await load();if(close)setSelected(null)}catch(e){toast.error(errorMessage(e))}finally{setBusy(false)}}
+  if(loading)return <PageSkeleton/>
+  return <div><PageHeader eyebrow="QUOTATIONS" title="My quotations" description="Review immutable submissions, create revisions, withdraw eligible offers and answer operations clarifications." actions={<><PortalButton onClick={()=>toast("Quotation export is unavailable from the current API.")}>Export unavailable</PortalButton><Link href="/requests"><PortalButton variant="primary">Quote a new request</PortalButton></Link></>}/>
+    <section className="mb-[18px] grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Submitted this month" value={String(quotes.filter(q=>q.submittedAt&&new Date(q.submittedAt).getMonth()===new Date().getMonth()).length)} meta="Current records" icon={<HiClipboardDocumentList/>}/><MetricCard label="Awaiting decision" value={String(quotes.filter(q=>q.status==="Awaiting decision").length)} meta="Operations review" icon={<span>○</span>}/><MetricCard label="Accepted" value={String(quotes.filter(q=>q.status==="Accepted").length)} meta="Published selections" icon={<HiCheck/>}/><MetricCard label="Needs clarification" value={String(quotes.filter(q=>q.clarificationItems?.some(c=>!c.reply)).length)} meta="Action required" bad icon={<HiExclamationTriangle/>}/></section>
+    <Panel><DataTabs value={tab} onChange={setTab} tabs={[{id:"all",label:"All quotations"},{id:"awaiting",label:"Awaiting decision"},{id:"accepted",label:"Accepted"},{id:"closed",label:"Closed"}]}/>{!filtered.length?<p className="p-8 text-center text-sm text-muted-text">No quotations in this view.</p>:<div className="overflow-auto"><table className="w-full border-collapse whitespace-nowrap"><thead><tr>{["Quote","Revision","Request","Parts","Your price","Estimate","Status","Action"].map(h=><th key={h} className="bg-canvas px-[15px] py-3 text-left text-[10px] font-bold text-muted-text">{h}</th>)}</tr></thead><tbody>{filtered.map(q=><tr key={q.backendId??q.id}><td className="border-t border-line px-[15px] py-3 text-xs cell-title">{q.id}</td><td className="border-t border-line px-[15px] py-3 text-xs">{q.revisionNumber}</td><td className="border-t border-line px-[15px] py-3 text-xs">{q.request}</td><td className="border-t border-line px-[15px] py-3 text-xs">{q.part}</td><td className="border-t border-line px-[15px] py-3 text-xs cell-title">{q.price}</td><td className="border-t border-line px-[15px] py-3 text-xs">{q.eta}</td><td className="border-t border-line px-[15px] py-3 text-xs"><StatusBadge status={q.status}/></td><td className="border-t border-line px-[15px] py-3"><PortalButton size="sm" onClick={()=>void open(q)}>Manage</PortalButton></td></tr>)}</tbody></table></div>}</Panel>
+    <Dialog open={!!selected} onOpenChange={o=>{if(!o){setSelected(null);setDetail(null)}}}><DialogContent className="sm:max-w-2xl"><DialogHeader><div className="eyebrow">QUOTATION DETAILS</div><DialogTitle>{selected?.id}</DialogTitle></DialogHeader>{!detail?<PageSkeleton/>:<div className="space-y-4 text-sm"><div className="grid gap-2 sm:grid-cols-2"><p>Request: <b>{detail.requestId}</b></p><p>Revision: <b>{detail.revisionNumber}</b></p><p>Subtotal: <b>৳{detail.supplierSubtotal}</b></p><p>Valid until: <b>{new Date(detail.validUntil).toLocaleString()}</b></p></div>
+      {detail.status==="DRAFT"&&<div className="space-y-3 rounded-xl border border-line p-4"><p className="font-bold">Edit draft revision</p><Field label="Supplier notes"><FormControl value={detail.supplierNotes??""} onChange={e=>setDetail({...detail,supplierNotes:e.target.value})}/></Field>{detail.items.map((item,index)=><Field key={item.id} label={`${item.description} unit price (BDT)`}><FormControl inputMode="decimal" value={item.supplierUnitPrice} onChange={e=>setDetail({...detail,items:detail.items.map((row,i)=>i===index?{...row,supplierUnitPrice:e.target.value}:row)})}/></Field>)}<div className="flex gap-2"><PortalButton disabled={busy} onClick={()=>businessId&&void action(()=>updateQuotation(businessId,detail).then(setDetail),"Draft saved.")}>Save draft</PortalButton><PortalButton variant="primary" disabled={busy} onClick={()=>businessId&&void action(()=>updateQuotation(businessId,detail).then(saved=>submitQuotation(businessId,saved.id)),"Revision submitted.",true)}>Save & submit</PortalButton></div></div>}
+      {detail.clarifications.map(c=><div key={c.id} className="rounded-xl bg-canvas p-3"><b>Operations: {c.question}</b>{c.reply?<p className="mt-2">Your reply: {c.reply}</p>:<form className="mt-2 flex gap-2" onSubmit={e=>{e.preventDefault();if(!businessId)return;const reply=String(new FormData(e.currentTarget).get("reply"));void action(()=>replyClarification(businessId,detail.id,c.id,reply).then(()=>getQuotation(businessId,detail.id)).then(setDetail),"Reply sent.")}}><FormControl name="reply" required placeholder="Reply to operations"/><PortalButton type="submit" disabled={busy}>Reply</PortalButton></form>}</div>)}
+      {["SUBMITTED","UNDER_REVIEW","CLARIFICATION"].includes(detail.status)&&<div className="flex flex-wrap gap-2"><PortalButton disabled={busy} onClick={()=>businessId&&void action(()=>createRevision(businessId,detail.id).then(setDetail),"Draft revision created.")}>Create revision</PortalButton><FormControl className="min-w-[220px]" value={reason} onChange={e=>setReason(e.target.value)} placeholder="Withdrawal reason"/><PortalButton variant="danger" disabled={busy||reason.trim().length<3} onClick={()=>businessId&&void action(()=>withdrawQuotation(businessId,detail.id,reason),"Quotation withdrawn.",true)}>Withdraw</PortalButton></div>}<p className="text-xs text-muted-text">Submitted versions remain immutable. A new revision supersedes the prior version only after successful submission.</p></div>}</DialogContent></Dialog>
+  </div>
+}
